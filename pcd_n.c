@@ -26,7 +26,7 @@ char memory_buffer_pcdev4[DEV_MEM_SIZE_PCDEV4];
 struct pcdev_private_data
 {
 	char *buffer;
-	unsigned size;
+	int size;
 	const char *serial_number;
 	/* Device permission */
 	int perm;
@@ -149,7 +149,12 @@ loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_pos)
 {
 
-#if 0
+	/* Extracting private data file structure from filp */
+	struct pcdev_private_data *pcdev_data = (struct pcdev_private_data*)filp->private_data;
+
+	/* Defining device memory size */
+	unsigned int dev_mem_size = pcdev_data -> size;
+
 	/* 0. Print read request amount of data bytes and actuall position of data before read */
 
 	pr_info("\nread requested for %zu bytes \n",count);
@@ -157,14 +162,14 @@ ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_p
 
 	/* 1. Check if value of count data is not greater than buffer size, and if is trim count value */
 
-	if((*f_pos + count) > DEV_MEM_SIZE)
+	if((*f_pos + count) > dev_mem_size)
 	{
-		count = DEV_MEM_SIZE - *f_pos;
+		count = dev_mem_size - *f_pos;
 	}
 
 	/* 2. Copy kernel buffer data to user space */
 
-	if(copy_to_user(buff, &memory_buffer[*f_pos], count))
+	if(copy_to_user(buff, pcdev_data->buffer+(*f_pos), count))
 	{
 		return -EFAULT;
 	}
@@ -181,7 +186,7 @@ ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_p
 	/* 6. Return amount of data bytes if data was successfully read */
 
 	return count;
-#endif
+
 
 	return 0;
 
