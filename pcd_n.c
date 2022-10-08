@@ -287,7 +287,7 @@ static int __init pcd_init(void)
 		pr_err("Class creation failed\n");
 		/*Convert pointer to error code int */
 		ret = PTR_ERR(pcdrv_data.pcd_class);
-		goto cdev_del;
+		goto unreg_chardev_region;
 	}
 
 
@@ -307,7 +307,7 @@ static int __init pcd_init(void)
 		if(ret < 0)
 		{
 			pr_err("Cdev add failed\n");
-			goto unreg_chardev_region;
+			goto cdev_del;
 		}
 		/* 5. Populate the sysfs (/sys/class/) with device information */
 		pcdrv_data.pcd_device = device_create(pcdrv_data.pcd_class, NULL, pcdrv_data.device_number+i, NULL, "pc-dev-%d", i+1);
@@ -326,17 +326,16 @@ static int __init pcd_init(void)
 	pr_info("Module initialization was succesfull\n");
 	return 0;
 
-class_del:
-class_destroy(pcdrv_data.pcd_class);
-
 
 cdev_del:
-
-for (i=0;i<NUMBER_OF_DEVICES;i++)
+class_del:
+for (;i>=0;i--)
 {
+	device_destroy(pcdrv_data.pcd_class,pcdrv_data.device_number+i);
 	cdev_del(&pcdrv_data.pcdev_data[i].cdev);
 }
 
+	class_destroy(pcdrv_data.pcd_class);
 
 unreg_chardev_region:
 	unregister_chrdev_region(pcdrv_data.device_number, NUMBER_OF_DEVICES);
@@ -351,30 +350,33 @@ out:
 
 static void __exit pcd_cleanup(void)
 {
-#if 0
-/* Clean-up functions should be called in revers order compare to __init functions order */
 
-/* Destroy device information in sysfs */
+	int i;
+	/* Clean-up functions should be called in revers order compare to __init functions order */
 
-	device_destroy(pcd_class, device_number);
 
-/* Destroy device class in sysfs */
 
-	class_destroy(pcd_class);
+	for(i=0;i<NUMBER_OF_DEVICES;i++)
+	{
+		/* 1. Destroy device information in sysfs */
+		device_destroy(pcdrv_data.pcd_class,pcdrv_data.device_number+i);
+		/* 3. Unregister a device (cdev structure) from VFS */
+		cdev_del(&pcdrv_data.pcdev_data[i].cdev);
+	}
 
-/* Unregister a device (cdev structure) from VFS */
 
-	cdev_del(&pcd_cdev);
+	/* 2. Destroy device class in sysfs */
+	class_destroy(pcdrv_data.pcd_class);
 
-/* Deallocate a device number */
+	/* 4. Deallocate a device number */
 
-	unregister_chrdev_region(device_number, 1);
+	unregister_chrdev_region(pcdrv_data.device_number, NUMBER_OF_DEVICES);
 
-/* Some clean-up message */
+	/* 5. Some clean-up message */
 
-pr_info("Module clean-up was succesfull\n");
+	pr_info("Module was succesfully unloaded\n");
 
-#endif
+
 
 }
 
