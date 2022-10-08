@@ -235,8 +235,42 @@ ssize_t pcd_write(struct file *filp, const char __user *buff, size_t count,  lof
 
 }
 
+int check_permission(void)
+{
+	return 0;
+}
+
 int pcd_open(struct inode *inode, struct file *filp)
 {
+	int minor_n;
+	int ret;
+
+	struct pcdev_private_data *pcdev_data;
+
+	/* Find out on which device numer open was attempted by user space */
+	minor_n = MINOR(inode->i_rdev);
+	pr_info("Device number %d was attempted \n",minor_n);
+
+	/* Extract device private data structure from *cdev */
+
+	pcdev_data = container_of(inode -> i_cdev, struct pcdev_private_data, cdev);
+
+	/* Supply other methods with device private data */
+	filp->private_data = pcdev_data;
+
+	ret = check_permission();
+
+	if(!ret)
+	{
+		pr_info("Open was succesfull\n");
+	}
+	else
+	{
+		pr_info("Open wasn't successfull\n");
+	}
+
+
+
 	pr_info("Open was successful\n");
 	return 0;
 }
