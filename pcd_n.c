@@ -12,6 +12,10 @@
 #define DEV_MEM_SIZE_PCDEV3 1024
 #define DEV_MEM_SIZE_PCDEV4 1024
 
+#define RDONLY 0x1
+#define WRONLY 0x10
+#define RDWR   0x11
+
 #undef pr_fmt
 #define pr_fmt(fmt) "%s :" fmt, __func__
 
@@ -60,28 +64,28 @@ struct pcdrv_private_data pcdrv_data =
 			.buffer = memory_buffer_pcdev1,
 			.size = DEV_MEM_SIZE_PCDEV1,
 			.serial_number = "PCDEV1",
-			.perm = 0x1 /* RDONLY */
+			.perm = RDONLY /* RDONLY */
 		},
 
 		[1] = {
 			.buffer = memory_buffer_pcdev2,
 			.size = DEV_MEM_SIZE_PCDEV2,
 			.serial_number = "PCDEV2",
-			.perm = 0x10 /* WRONLY */
+			.perm = WRONLY /* WRONLY */
 		},
 
 		[2] = {
 			.buffer = memory_buffer_pcdev3,
 			.size = DEV_MEM_SIZE_PCDEV3,
 			.serial_number = "PCDEV3",
-			.perm = 0x11 /* RDWR */
+			.perm = RDWR /* RDWR */
 		},
 
 		[3] = {
 			.buffer = memory_buffer_pcdev4,
 			.size = DEV_MEM_SIZE_PCDEV4,
 			.serial_number = "PCDEV4",
-			.perm = 0x11 /* RDWR */
+			.perm = RDWR /* RDWR */
 		}
 
 	}
@@ -91,8 +95,14 @@ struct pcdrv_private_data pcdrv_data =
 loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 {
 
-#if 0
+	/* Define current cursor position */
 	loff_t curr_f_pos;
+
+	/* Extracting private data file structure from filp */
+	struct pcdev_private_data *pcdev_data = (struct pcdev_private_data*)filp->private_data;
+
+	/* Defining device memory size */
+	unsigned int dev_mem_size = pcdev_data -> size;
 
 	pr_info("lseek requested \n");
 	pr_info("Current value of file position = %lld", filp->f_pos);
@@ -103,7 +113,7 @@ loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 
 			/* Check if offset is greater than buffer array size */
 
-			if(offset > DEV_MEM_SIZE || offset < 0)
+			if(offset > dev_mem_size  || offset < 0)
 			{
 				return -EINVAL;
 			}
@@ -115,7 +125,7 @@ loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 
 			/*Check if sum of current file position and offset is not greater than buffer size and less than 0 */
 			curr_f_pos = filp-> f_pos + offset;
-			if(curr_f_pos > DEV_MEM_SIZE || curr_f_pos <0)
+			if(curr_f_pos > dev_mem_size || curr_f_pos <0)
 			{
 				return -EINVAL;
 			}
@@ -127,8 +137,8 @@ loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 		case SEEK_END:
 
 			/*Check if sum of current file position and offset is not greater than buffer size and less than 0 */
-			curr_f_pos = DEV_MEM_SIZE + offset;
-			if(curr_f_pos > DEV_MEM_SIZE || curr_f_pos <0)
+			curr_f_pos = dev_mem_size + offset;
+			if(curr_f_pos > dev_mem_size || curr_f_pos <0)
 			{
 				return -EINVAL;
 			}
@@ -138,13 +148,11 @@ loff_t pcd_lseek(struct file *filp, loff_t offset, int whence)
 			/* Invalid whence argument has been received */
 			return -EINVAL;
 
-		pr_info("New value of file pointer file position = %lld", filp->f_pos);
+		pr_info("New value of file pointer file position = %lld\n", filp->f_pos);
 	}
 
 	return filp->f_pos;
-#endif
 
-	return 0;
 }
 ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_pos)
 {
@@ -193,30 +201,36 @@ ssize_t pcd_read(struct file *filp, char __user *buff, size_t count, loff_t *f_p
 }
 ssize_t pcd_write(struct file *filp, const char __user *buff, size_t count,  loff_t *f_pos)
 {
-#if 0
-	/* 0. Print write request amount of data bytes and actuall position of data before read */
 
-	pr_info("\nWrite requested for %zu bytes \n",count);
+	/* Extracting private data file structure from filp */
+	struct pcdev_private_data *pcdev_data = (struct pcdev_private_data*)filp->private_data;
+
+	/* Defining device memory size */
+	unsigned int dev_mem_size = pcdev_data -> size;
+
+	/* 0. Print read request amount of data bytes and actuall position of data before read */
+
+	pr_info("Write requested for %zu bytes\n",count);
 	pr_info("\nCurrent position of data before writing process = %lld\n", *f_pos);
 
 	/* 1. Check if value of count data is not greater than buffer size, and if is trim count value */
 
-	if((*f_pos + count) > DEV_MEM_SIZE)
+	if((*f_pos + count) > dev_mem_size)
 	{
-		count = DEV_MEM_SIZE - *f_pos;
+		count = dev_mem_size - *f_pos;
 	}
 
 	/* If on input is zero value of data return error */
 
 	if(!count)
 	{
-		pr_err("No memory left on device");
+		pr_err("No memory left on device\n");
 		return -ENOMEM;
 	}
 
 	/* 2. Copy user space data to kernel space */
 
-	if(copy_from_user(&memory_buffer[*f_pos], buff, count))
+	if(copy_from_user(pcdev_data->buffer+(*f_pos), buff, count))
 	{
 		return -EFAULT;
 	}
@@ -234,15 +248,26 @@ ssize_t pcd_write(struct file *filp, const char __user *buff, size_t count,  lof
 
 	return count;
 
-#endif
-
-	return 0;
-
 }
 
-int check_permission(void)
+int check_permission(int device_permission, int access_permission)
 {
-	return 0;
+	if(device_permission == RDWR)
+	{
+		return 0;
+	}
+	/* Ensures read-only access */
+	if((device_permission == RDONLY) && (access_permission & FMODE_READ) && !(access_permission & FMODE_WRITE))
+	{
+		return 0;
+	}
+	/* Ensures write-only access */
+	if((device_permission == WRONLY) && (access_permission & FMODE_WRITE) && !(access_permission & FMODE_READ))
+	{
+		return 0;
+	}
+
+	return -EPERM;
 }
 
 int pcd_open(struct inode *inode, struct file *filp)
@@ -254,7 +279,7 @@ int pcd_open(struct inode *inode, struct file *filp)
 
 	/* Find out on which device numer open was attempted by user space */
 	minor_n = MINOR(inode->i_rdev);
-	pr_info("Device number %d was attempted \n",minor_n);
+	pr_info("Device number %d was attempted\n",minor_n);
 
 	/* Extract device private data structure from *cdev */
 
@@ -263,7 +288,7 @@ int pcd_open(struct inode *inode, struct file *filp)
 	/* Supply other methods with device private data */
 	filp->private_data = pcdev_data;
 
-	ret = check_permission();
+	ret = check_permission(pcdev_data->perm, filp->f_mode);
 
 	if(!ret)
 	{
@@ -354,7 +379,7 @@ static int __init pcd_init(void)
 		/* 5.e Error handling */
 		if(IS_ERR(pcdrv_data.pcd_device))
 		{
-			pr_err("Device was not created");
+			pr_err("Device was not created\n");
 			ret = PTR_ERR(pcdrv_data.pcd_device);
 			goto class_del;
 		}
@@ -380,7 +405,7 @@ unreg_chardev_region:
 	unregister_chrdev_region(pcdrv_data.device_number, NUMBER_OF_DEVICES);
 
 out:
-	pr_err("Module insertion failed");
+	pr_err("Module insertion failed\n");
 	return ret;
 
 }
