@@ -296,13 +296,12 @@ int pcd_open(struct inode *inode, struct file *filp)
 	}
 	else
 	{
-		pr_info("Open wasn't successfull\n");
+		pr_info("Open was unsuccessfull\n");
+		return -EPERM;
 	}
 
-
-
-	pr_info("Open was successful\n");
 	return 0;
+
 }
 int pcd_release(struct inode *inode, struct file *flip)
 {
